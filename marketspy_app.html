@@ -1,0 +1,851 @@
+```html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MarketSpy - Scraper & Product Intelligence Dashboard</title>
+    <!-- Tailwind CSS for Ultra-Premium UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Chart.js for Business Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        heading: ['Plus Jakarta Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar styling for high-end SaaS feel */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-600 antialiased min-h-screen flex">
+
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0">
+        <!-- Logo Brand -->
+        <div class="p-6 border-b border-slate-800 flex items-center gap-3">
+            <div class="h-9 w-9 bg-indigo-600 rounded-lg flex items-center justify-center text-white text-xl font-bold font-heading">
+                M
+            </div>
+            <div>
+                <h1 class="text-white font-heading font-bold text-lg leading-tight">MarketSpy</h1>
+                <span class="text-xs text-indigo-400 font-medium tracking-wider uppercase">SaaS Scraper</span>
+            </div>
+        </div>
+
+        <!-- Navigation Menu -->
+        <nav class="flex-1 p-4 space-y-1.5" id="sidebar-nav">
+            <button onclick="switchView('dashboard')" id="nav-dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition bg-indigo-600/10 text-indigo-400">
+                <i class="fa-solid fa-chart-pie text-lg"></i> Dashboard
+            </button>
+            <button onclick="switchView('scraper')" id="nav-scraper" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition text-slate-400 hover:bg-slate-800 hover:text-slate-200">
+                <i class="fa-solid fa-circle-play text-lg"></i> Scraper Engine
+            </button>
+            <button onclick="switchView('results')" id="nav-results" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition text-slate-400 hover:bg-slate-800 hover:text-slate-200">
+                <i class="fa-solid fa-table-list text-lg"></i> Hasil Data
+            </button>
+            <button onclick="switchView('billing')" id="nav-billing" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition text-slate-400 hover:bg-slate-800 hover:text-slate-200">
+                <i class="fa-solid fa-crown text-lg"></i> Monetisasi & Billing
+            </button>
+        </nav>
+
+        <!-- Mode Toggle & User Info -->
+        <div class="p-4 border-t border-slate-800 space-y-4">
+            <!-- Live API vs Demo Toggle -->
+            <div class="bg-slate-800/50 p-3 rounded-lg border border-slate-800">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs text-slate-400 font-medium">Mode Koneksi</span>
+                    <span id="connection-badge" class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">DEMO</span>
+                </div>
+                <button id="mode-toggle-btn" onclick="toggleConnectionMode()" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-medium text-xs py-1.5 px-3 rounded transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-plug"></i> Hubungkan ke FastAPI
+                </button>
+            </div>
+            
+            <div class="flex items-center gap-3 px-2">
+                <div class="h-9 w-9 bg-slate-700 rounded-full flex items-center justify-center font-bold text-slate-200">
+                    JD
+                </div>
+                <div class="truncate">
+                    <p class="text-sm text-white font-medium truncate">John Doe (Pro)</p>
+                    <p class="text-xs text-slate-500 truncate font-mono">Quota: 4.8k / 5.0k</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="flex-1 flex flex-col min-h-screen overflow-y-auto">
+        <!-- Top Navigation Header -->
+        <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shrink-0">
+            <div class="flex items-center gap-2">
+                <span id="view-title" class="text-lg font-semibold text-slate-800 font-heading">Dashboard Analytics</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+                    <span class="h-2 w-2 rounded-full bg-emerald-500"></span> API Status: Active
+                </div>
+                <a href="#" class="text-slate-400 hover:text-slate-600"><i class="fa-regular fa-bell text-xl"></i></a>
+            </div>
+        </header>
+
+        <!-- VIEW 1: DASHBOARD -->
+        <div id="view-dashboard" class="p-8 space-y-6">
+            <!-- KPI Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-xs font-bold text-slate-400 tracking-wider uppercase">Sisa Kuota Scrape</span>
+                        <div class="h-8 w-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center"><i class="fa-solid fa-database"></i></div>
+                    </div>
+                    <h3 class="text-2xl font-bold font-heading text-slate-800">4.821 <span class="text-xs text-slate-400 font-normal">/ 5.000</span></h3>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
+                        <div class="bg-indigo-600 h-full" style="width: 96.4%"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-xs font-bold text-slate-400 tracking-wider uppercase">Total Scraped Items</span>
+                        <div class="h-8 w-8 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center"><i class="fa-solid fa-list-check"></i></div>
+                    </div>
+                    <h3 class="text-2xl font-bold font-heading text-slate-800" id="kpi-total-scraped">124</h3>
+                    <p class="text-xs text-emerald-600 font-medium mt-2"><i class="fa-solid fa-arrow-up-long"></i> +15% peningkatan harian</p>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-xs font-bold text-slate-400 tracking-wider uppercase">Proxy Sehat</span>
+                        <div class="h-8 w-8 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center"><i class="fa-solid fa-network-wired"></i></div>
+                    </div>
+                    <h3 class="text-2xl font-bold font-heading text-slate-800">48 / 50</h3>
+                    <p class="text-xs text-slate-400 mt-2">Rotator aktif otomatis</p>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-xs font-bold text-slate-400 tracking-wider uppercase">Active Task (Schedule)</span>
+                        <div class="h-8 w-8 bg-purple-50 text-purple-600 rounded-lg flex items-center justify-center"><i class="fa-solid fa-calendar-check"></i></div>
+                    </div>
+                    <h3 class="text-2xl font-bold font-heading text-slate-800">3 Aktif</h3>
+                    <p class="text-xs text-purple-600 font-medium mt-2">Next Sync: Malam ini, 00:00</p>
+                </div>
+            </div>
+
+            <!-- Charts & Activity Log -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Main Chart -->
+                <div class="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                    <div class="flex justify-between items-center mb-6">
+                        <h4 class="text-sm font-bold text-slate-800 tracking-wide uppercase">Volume Scraping Mingguan</h4>
+                        <span class="text-xs text-slate-400">Terakhir diperbarui: Hari ini</span>
+                    </div>
+                    <div class="flex-grow min-h-[250px] relative">
+                        <canvas id="weeklyChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Recent Activity Logs -->
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                    <h4 class="text-sm font-bold text-slate-800 tracking-wide uppercase mb-4">Log Sistem Terakhir</h4>
+                    <div class="flex-grow space-y-4 overflow-y-auto max-h-[270px] pr-2">
+                        <div class="flex gap-3 text-xs">
+                            <div class="h-6 w-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-check"></i></div>
+                            <div>
+                                <p class="font-semibold text-slate-800">Scraping Selesai (9 Produk)</p>
+                                <p class="text-slate-400">File: data_handphone.csv • Tokopedia GraphQL</p>
+                                <span class="text-[10px] text-slate-400 block mt-1">2 menit yang lalu</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-3 text-xs">
+                            <div class="h-6 w-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-arrows-rotate"></i></div>
+                            <div>
+                                <p class="font-semibold text-slate-800">Proxy Rotated</p>
+                                <p class="text-slate-400">Rotasi IP sukses melewati anti-bot Tokped</p>
+                                <span class="text-[10px] text-slate-400 block mt-1">15 menit yang lalu</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-3 text-xs">
+                            <div class="h-6 w-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-file-arrow-up"></i></div>
+                            <div>
+                                <p class="font-semibold text-slate-800">Jadwal Tugas Ditambahkan</p>
+                                <p class="text-slate-400">Monitoring Toko 'AppleOfficial' dibuat</p>
+                                <span class="text-[10px] text-slate-400 block mt-1">1 jam yang lalu</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 2: SCRAPER ENGINE -->
+        <div id="view-scraper" class="p-8 space-y-6 hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
+                
+                <!-- Left Control Panel (2 Columns) -->
+                <div class="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+                    <h3 class="text-base font-bold text-slate-800 uppercase tracking-wide border-b border-slate-100 pb-3">Konfigurasi Scrape</h3>
+                    
+                    <!-- Marketplace Selector -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Pilih Marketplace Target</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <label class="border-2 border-indigo-600 bg-indigo-50/20 rounded-xl p-3 flex items-center gap-3 cursor-pointer">
+                                <input type="radio" name="marketplace" value="tokopedia" checked class="accent-indigo-600">
+                                <div>
+                                    <p class="text-xs font-bold text-slate-800">Tokopedia</p>
+                                    <span class="text-[10px] text-emerald-500 font-semibold">Active & Fast</span>
+                                </div>
+                            </label>
+                            <label class="border border-slate-200 hover:border-slate-300 rounded-xl p-3 flex items-center gap-3 cursor-pointer opacity-60">
+                                <input type="radio" name="marketplace" value="shopee" disabled class="accent-indigo-600">
+                                <div>
+                                    <p class="text-xs font-bold text-slate-800">Shopee</p>
+                                    <span class="text-[10px] text-amber-500 font-semibold">Coming Soon</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Row Limits -->
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Maks. Produk Per Item (Baris)</label>
+                            <span id="limit-val" class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded">3 Data</span>
+                        </div>
+                        <input type="range" id="max_per_item" min="1" max="10" value="3" oninput="document.getElementById('limit-val').textContent = this.value + ' Data'" class="w-full accent-indigo-600 cursor-pointer">
+                        <span class="text-[10px] text-slate-400">Makin sedikit limit, proses scraping akan makin cepat dan hemat kuota request.</span>
+                    </div>
+
+                    <!-- File Drag & Drop -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Unggah File Database (.CSV)</label>
+                        <div class="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center justify-center" onclick="document.getElementById('csv-file-input').click()">
+                            <i class="fa-solid fa-file-csv text-4xl text-slate-300 mb-3" id="csv-icon"></i>
+                            <p class="text-xs font-semibold text-slate-700" id="file-name-label">Seret CSV Anda ke sini atau cari file</p>
+                            <p class="text-[10px] text-slate-400 mt-1">Harus mengandung header kolom: "merk" dan "tipe"</p>
+                            <input type="file" id="csv-file-input" accept=".csv" class="hidden" onchange="handleFileSelection(this)">
+                        </div>
+                        <div class="flex justify-between mt-3">
+                            <button onclick="downloadSampleCSV()" class="text-indigo-600 hover:text-indigo-700 text-xs font-semibold flex items-center gap-1">
+                                <i class="fa-solid fa-download"></i> Unduh Contoh CSV HP
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Execute Button -->
+                    <button id="start-scrape-btn" onclick="executeScraper()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/15">
+                        <i class="fa-solid fa-play"></i> Mulai Proses Scraping
+                    </button>
+                </div>
+
+                <!-- Right Live Progress Terminal (3 Columns) -->
+                <div class="lg:col-span-3 bg-slate-950 text-slate-200 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[520px] border border-slate-800">
+                    <!-- Console Header -->
+                    <div class="bg-slate-900 px-4 py-3 flex items-center justify-between border-b border-slate-800 shrink-0">
+                        <div class="flex items-center gap-2">
+                            <span class="h-3 w-3 rounded-full bg-rose-500"></span>
+                            <span class="h-3 w-3 rounded-full bg-amber-500"></span>
+                            <span class="h-3 w-3 rounded-full bg-emerald-500"></span>
+                        </div>
+                        <span class="text-xs font-mono font-bold tracking-wider text-slate-500 uppercase">Live Console & Progress</span>
+                        <button onclick="clearConsole()" class="text-slate-500 hover:text-slate-300 text-xs"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+
+                    <!-- Main Progress Indicator inside Console -->
+                    <div class="bg-slate-900/60 p-4 border-b border-slate-800 shrink-0">
+                        <div class="flex justify-between text-xs font-mono mb-2">
+                            <span id="console-progress-text" class="text-slate-400">Sistem Siap Sedia...</span>
+                            <span id="console-progress-pct" class="font-bold text-indigo-400">0%</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div id="console-progress-bar" class="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full w-0"></div>
+                        </div>
+                    </div>
+
+                    <!-- Terminal Log Output Area -->
+                    <div id="console-logs" class="flex-grow p-5 font-mono text-xs overflow-y-auto space-y-2 text-slate-300">
+                        <p class="text-slate-500">[SYSTEM] Menunggu unggahan file database CSV dan parameter masukan...</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- VIEW 3: DATA RESULTS -->
+        <div id="view-results" class="p-8 space-y-6 hidden">
+            <!-- Results Key KPIs -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-indigo-50 border border-indigo-100 p-5 rounded-xl flex items-center gap-4">
+                    <div class="h-12 w-12 bg-indigo-600 rounded-lg text-white text-xl flex items-center justify-center"><i class="fa-solid fa-coins"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Rata-rata Harga Pasar</p>
+                        <h4 class="text-xl font-bold font-heading text-slate-800" id="stat-avg-price">Rp 10.266.000</h4>
+                    </div>
+                </div>
+                <div class="bg-emerald-50 border border-emerald-100 p-5 rounded-xl flex items-center gap-4">
+                    <div class="h-12 w-12 bg-emerald-600 rounded-lg text-white text-xl flex items-center justify-center"><i class="fa-solid fa-chart-line"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Total Penjualan Terdeteksi</p>
+                        <h4 class="text-xl font-bold font-heading text-slate-800" id="stat-total-sales">850+ Item</h4>
+                    </div>
+                </div>
+                <div class="bg-purple-50 border border-purple-100 p-5 rounded-xl flex items-center gap-4">
+                    <div class="h-12 w-12 bg-purple-600 rounded-lg text-white text-xl flex items-center justify-center"><i class="fa-solid fa-location-dot"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-purple-400 uppercase tracking-wider">Sentra Seller Utama</p>
+                        <h4 class="text-xl font-bold font-heading text-slate-800" id="stat-top-city">Jakarta Barat</h4>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Data Table Container -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                <!-- Table Controls Header -->
+                <div class="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 bg-slate-50/50">
+                    <div class="flex items-center gap-3">
+                        <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text" id="table-search" oninput="filterTable()" placeholder="Cari merk, tipe, toko..." class="pl-9 pr-4 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:border-indigo-500 w-60">
+                        </div>
+                        <select id="table-filter-brand" onchange="filterTable()" class="border border-slate-200 rounded-lg py-1.5 px-3 text-xs bg-white focus:outline-none">
+                            <option value="ALL">Semua Merk</option>
+                            <option value="Samsung">Samsung</option>
+                            <option value="Apple">Apple</option>
+                            <option value="Xiaomi">Xiaomi</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button onclick="downloadAsExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-4 rounded-lg text-xs transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-file-excel"></i> Ekspor ke Excel (.CSV)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Table Grid Area -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-400 text-[10px] uppercase font-bold tracking-wider border-b border-slate-200">
+                                <th class="py-3 px-6">Input Query</th>
+                                <th class="py-3 px-6">Nama Produk Tokopedia</th>
+                                <th class="py-3 px-6">Harga</th>
+                                <th class="py-3 px-6">Terjual</th>
+                                <th class="py-3 px-6">Rating</th>
+                                <th class="py-3 px-6">Toko / Lokasi</th>
+                                <th class="py-3 px-6 text-center">Tautan</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scraped-results-tbody" class="divide-y divide-slate-100 text-slate-700 text-xs font-medium">
+                            <!-- JS will inject rows dynamically here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 4: MONETISASI & BILLING -->
+        <div id="view-billing" class="p-8 space-y-8 hidden">
+            <!-- Header Explainer -->
+            <div class="text-center max-w-2xl mx-auto space-y-2">
+                <span class="text-indigo-600 font-bold uppercase tracking-widest text-xs">Monetisasi Model SaaS</span>
+                <h2 class="text-3xl font-bold font-heading text-slate-800">Paket Harga Langganan Fleksibel</h2>
+                <p class="text-sm text-slate-400">Aplikasi MarketSpy ini siap dikomersialkan menggunakan sistem pembayaran otomatis bulanan (recurrring billing) yang sudah terintegrasi.</p>
+            </div>
+
+            <!-- Pricing Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto items-stretch">
+                <!-- Free Plan -->
+                <div class="bg-white border border-slate-200 p-8 rounded-2xl shadow-sm flex flex-col justify-between">
+                    <div>
+                        <h4 class="text-slate-800 font-bold text-lg font-heading">Paket Free (Uji Coba)</h4>
+                        <p class="text-xs text-slate-400 mt-1">Cocok untuk mencoba fungsionalitas dasar riset pasar.</p>
+                        <div class="my-6">
+                            <span class="text-3xl font-extrabold text-slate-800 font-heading">Rp 0</span>
+                            <span class="text-xs text-slate-400">/ selamanya</span>
+                        </div>
+                        <ul class="space-y-3.5 text-xs">
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-indigo-600"></i> Maks. 3 Baris input file CSV</li>
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-indigo-600"></i> Ambil 3 data per item (`limit=3`)</li>
+                            <li class="flex items-center gap-2.5 text-slate-300 line-through"><i class="fa-solid fa-xmark text-slate-300"></i> Ekspor format Excel premium</li>
+                            <li class="flex items-center gap-2.5 text-slate-300 line-through"><i class="fa-solid fa-xmark text-slate-300"></i> Bypass captcha & Proxy Rotator</li>
+                        </ul>
+                    </div>
+                    <button class="w-full mt-8 border-2 border-slate-200 hover:border-slate-300 text-slate-700 font-bold py-3 px-4 rounded-xl text-xs transition">Paket Aktif Anda</button>
+                </div>
+
+                <!-- Pro Plan (Popular) -->
+                <div class="bg-white border-2 border-indigo-600 p-8 rounded-2xl shadow-lg relative flex flex-col justify-between">
+                    <span class="absolute top-0 right-8 -translate-y-1/2 bg-indigo-600 text-white font-bold tracking-widest text-[10px] uppercase py-1 px-3.5 rounded-full">Best Seller</span>
+                    <div>
+                        <h4 class="text-slate-800 font-bold text-lg font-heading">Paket Pro (Komersial)</h4>
+                        <p class="text-xs text-slate-400 mt-1">Untuk toko online, reseller, dropshipper, dan riset kompetitor.</p>
+                        <div class="my-6">
+                            <span class="text-3xl font-extrabold text-slate-800 font-heading">Rp 149.000</span>
+                            <span class="text-xs text-slate-400">/ bulan</span>
+                        </div>
+                        <ul class="space-y-3.5 text-xs">
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-emerald-500"></i> Tanpa Batas Baris file CSV</li>
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-emerald-500"></i> Ambil hingga 50 produk per item</li>
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-emerald-500"></i> Ekspor XLSX/Excel Premium</li>
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-emerald-500"></i> Proxy Rotator Bypass Anti-bot</li>
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-emerald-500"></i> Jadwalkan Scrape Harian</li>
+                        </ul>
+                    </div>
+                    <button onclick="alert('Ini adalah modal integrasi Payment Gateway otomatis (Gopay/OVO/Transfer Bank)!')" class="w-full mt-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl text-xs transition shadow-lg shadow-indigo-600/25">Mulai Berlangganan Pro</button>
+                </div>
+
+                <!-- Enterprise Plan -->
+                <div class="bg-white border border-slate-200 p-8 rounded-2xl shadow-sm flex flex-col justify-between">
+                    <div>
+                        <h4 class="text-slate-800 font-bold text-lg font-heading">Paket Enterprise</h4>
+                        <p class="text-xs text-slate-400 mt-1">Untuk korporasi riset pasar skala besar terintegrasi API.</p>
+                        <div class="my-6">
+                            <span class="text-3xl font-extrabold text-slate-800 font-heading">Rp 499.000</span>
+                            <span class="text-xs text-slate-400">/ bulan</span>
+                        </div>
+                        <ul class="space-y-3.5 text-xs">
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-indigo-600"></i> Semua Fitur Pro Tanpa Batas</li>
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-indigo-600"></i> Integrasi REST API Langsung</li>
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-indigo-600"></i> Proxy IP Privat Dedikasi</li>
+                            <li class="flex items-center gap-2.5"><i class="fa-solid fa-check text-indigo-600"></i> Bantuan Khusus 24/7 Developer</li>
+                        </ul>
+                    </div>
+                    <button onclick="alert('Menghubungi Tim Penjualan untuk Integrasi API')" class="w-full mt-8 border-2 border-indigo-600 hover:bg-indigo-50 text-indigo-600 font-bold py-3 px-4 rounded-xl text-xs transition">Hubungi Sales</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- INLINE JAVASCRIPT FOR DYNAMIC SPA CONTROLS AND API INTEGRATION -->
+    <script>
+        // Default Local Mockup Data (Pre-scraped results for beautiful initial display)
+        let scrapedDatabase = [
+            { merk_input: "Samsung", tipe_input: "A55 5G", nama_produk: "Samsung Galaxy A55 5G Ram 8/256GB Resmi", harga: "Rp 5.499.000", terjual: "250+ terjual", rating: "4.9", toko: "GadgetStore", lokasi: "Jakarta Barat", url: "https://tokopedia.com" },
+            { merk_input: "Apple", tipe_input: "iPhone 15", nama_produk: "Apple iPhone 15 Pro Max 256GB iBox Resmi", harga: "Rp 22.100.000", terjual: "100+ terjual", rating: "5.0", toko: "AppleCare", lokasi: "Jakarta Pusat", url: "https://tokopedia.com" },
+            { merk_input: "Xiaomi", tipe_input: "Redmi 13", nama_produk: "Xiaomi Redmi Note 13 Pro 8/256GB Original", harga: "Rp 3.199.000", terjual: "500+ terjual", rating: "4.8", toko: "XiaomiOfficial", lokasi: "Bandung", url: "https://tokopedia.com" }
+        ];
+
+        let selectedFile = null;
+        let isLiveMode = false; // Toggle to switch to Python FastAPI URL
+        let chartInstance = null;
+
+        // Initialization
+        window.addEventListener('load', () => {
+            renderResultsTable();
+            initializeChart();
+        });
+
+        // 1. Navigation Controller (SPA Views)
+        function switchView(viewName) {
+            // Hide all views
+            document.getElementById('view-dashboard').classList.add('hidden');
+            document.getElementById('view-scraper').classList.add('hidden');
+            document.getElementById('view-results').classList.add('hidden');
+            document.getElementById('view-billing').classList.add('hidden');
+
+            // Deactivate all sidebar nav indicators
+            const buttons = document.querySelectorAll('#sidebar-nav button');
+            buttons.forEach(btn => {
+                btn.className = "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition text-slate-400 hover:bg-slate-800 hover:text-slate-200";
+            });
+
+            // Show current view
+            document.getElementById(`view-${viewName}`).classList.remove('hidden');
+
+            // Style active nav button
+            const activeNav = document.getElementById(`nav-${viewName}`);
+            activeNav.className = "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition bg-indigo-600/10 text-indigo-400";
+
+            // Update top bar header title
+            const titles = {
+                dashboard: "Dashboard Analytics",
+                scraper: "Scraper Engine Core",
+                results: "Hasil Scrape Real-Time",
+                billing: "Komersialisasi & Strategi Monetisasi"
+            };
+            document.getElementById('view-title').textContent = titles[viewName];
+        }
+
+        // 2. Toggle Connection Mode (Demo vs Live FastAPI Backend)
+        function toggleConnectionMode() {
+            isLiveMode = !isLiveMode;
+            const badge = document.getElementById('connection-badge');
+            const btn = document.getElementById('mode-toggle-btn');
+            
+            if (isLiveMode) {
+                badge.textContent = "LIVE API";
+                badge.className = "text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20";
+                btn.innerHTML = '<i class="fa-solid fa-toggle-on text-emerald-400"></i> Mode API Aktif (PORT 8000)';
+                addLogConsole("SYSTEM", "Mode Koneksi berhasil dialihkan ke LIVE API (Target: http://127.0.0.1:8000).");
+            } else {
+                badge.textContent = "DEMO";
+                badge.className = "text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+                btn.innerHTML = '<i class="fa-solid fa-plug"></i> Hubungkan ke FastAPI';
+                addLogConsole("SYSTEM", "Mode Koneksi dialihkan ke DEMO SIMULATOR.");
+            }
+        }
+
+        // 3. File Handler
+        function handleFileSelection(input) {
+            if (input.files && input.files[0]) {
+                selectedFile = input.files[0];
+                document.getElementById('file-name-label').textContent = selectedFile.name;
+                document.getElementById('file-name-label').className = "text-xs font-bold text-indigo-600";
+                document.getElementById('csv-icon').className = "fa-solid fa-file-csv text-4xl text-indigo-500 mb-3";
+                addLogConsole("SYSTEM", `Berhasil memuat file input: "${selectedFile.name}" dari disk lokal.`);
+            }
+        }
+
+        // 4. Sample CSV Downloader Utility
+        function downloadSampleCSV() {
+            const csvContent = "data:text/csv;charset=utf-8,merk,tipe\nSamsung,A55 5G\nApple,iPhone 15\nXiaomi,Redmi 13\n";
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "data_handphone_sample.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 5. Console & Progress Utilities
+        function addLogConsole(sender, message, type = 'info') {
+            const consoleArea = document.getElementById('console-logs');
+            const timeString = new Date().toLocaleTimeString();
+            let colorClass = 'text-slate-300';
+            
+            if (type === 'success') colorClass = 'text-emerald-400 font-semibold';
+            if (type === 'error') colorClass = 'text-rose-400 font-semibold';
+            if (sender === 'SYSTEM') colorClass = 'text-amber-400';
+
+            const newLog = document.createElement('p');
+            newLog.innerHTML = `<span class="text-slate-500">[${timeString}]</span> <span class="${colorClass}">${sender ? `[${sender}] ` : ''}${message}</span>`;
+            consoleArea.appendChild(newLog);
+            consoleArea.scrollTop = consoleArea.scrollHeight;
+        }
+
+        function clearConsole() {
+            document.getElementById('console-logs').innerHTML = '<p class="text-slate-500">[SYSTEM] Konsol dibersihkan.</p>';
+            updateProgressBar(0, "Konsol bersih.");
+        }
+
+        function updateProgressBar(percent, statusText) {
+            document.getElementById('console-progress-pct').textContent = percent + "%";
+            document.getElementById('console-progress-text').textContent = statusText;
+            document.getElementById('console-progress-bar').style.width = percent + "%";
+        }
+
+        // 6. EXECUTE SCRAPER CORE (Binds to FastAPI or Simulates)
+        async function executeScraper() {
+            const limit = document.getElementById('max_per_item').value;
+
+            if (!selectedFile && !isLiveMode) {
+                // If demo mode and no file, mock loaded file
+                addLogConsole("SYSTEM", "Tidak ada file CSV yang diunggah. Menggunakan file contoh bawaan (data_handphone_sample.csv) untuk demo.");
+            } else if (!selectedFile && isLiveMode) {
+                alert("Mohon unggah file database .CSV Anda terlebih dahulu!");
+                return;
+            }
+
+            // Lock Start Button to prevent double-click
+            const startBtn = document.getElementById('start-scrape-btn');
+            startBtn.disabled = true;
+            startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            if (isLiveMode) {
+                // --- LIVE MODE: CONTEXT INTEGRATION WITH FASTAPI BACKEND ---
+                updateProgressBar(10, "Mengunggah CSV ke Server FastAPI...");
+                addLogConsole("SYSTEM", "Mengirim data biner ke http://127.0.0.1:8000/api/v1/scrape-to-ui...");
+                
+                let formData = new FormData();
+                formData.append("file", selectedFile);
+
+                try {
+                    const response = await fetch(`http://127.0.0.1:8000/api/v1/scrape-to-ui?max_per_item=${limit}`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) throw new Error("Gagal melakukan request ke backend FastAPI.");
+
+                    updateProgressBar(60, "Server sedang memproses GraphQL Tokopedia...");
+                    const data = await response.json();
+
+                    addLogConsole("FASTAPI", `Sukses mendapat respon. Total: ${data.length} produk terpindai!`, 'success');
+                    
+                    scrapedDatabase = data; // replace with real database
+                    renderResultsTable();
+                    updateProgressBar(100, "Scraping Selesai!");
+                    
+                    // Switch view to show the table
+                    setTimeout(() => { switchView('results'); }, 1500);
+
+                } catch (err) {
+                    addLogConsole("FASTAPI", `Gagal tersambung ke FastAPI. Detail: ${err.message}`, 'error');
+                    addLogConsole("SYSTEM", "Pastikan aplikasi main.py FastAPI Anda menyala di PORT 8000!", 'error');
+                    updateProgressBar(0, "Gagal tersambung.");
+                }
+
+            } else {
+                // --- DEMO SIMULATION MODE: SHOWCASING TO CLIENTS/INVESTORS ---
+                updateProgressBar(10, "Membuka file CSV & mengurai data...");
+                addLogConsole("DEMO_SCRAPER", "Berhasil mendeteksi file input: data_handphone.csv");
+                
+                const sampleRows = [
+                    { m: "Samsung", t: "A55 5G" },
+                    { m: "Apple", t: "iPhone 15" },
+                    { m: "Xiaomi", t: "Redmi 13" }
+                ];
+
+                let mockStep = 0;
+                let mockResultList = [];
+
+                function processMockItem() {
+                    if (mockStep < sampleRows.length) {
+                        let currentItem = sampleRows[mockStep];
+                        let pct = Math.floor(((mockStep + 1) / sampleRows.length) * 90);
+                        
+                        updateProgressBar(pct, `Mencari: "${currentItem.m} ${currentItem.t}"...`);
+                        addLogConsole("GQL_POST", `Mengirim Payload Query SearchProductV5Query ke gql.tokopedia.com...`);
+                        
+                        setTimeout(() => {
+                            addLogConsole("GQL_RESPONSE", `[+] Menemukan ${limit} produk untuk "${currentItem.m} ${currentItem.t}"`);
+                            
+                            // Generate mock query matching the schema
+                            for(let i = 1; i <= limit; i++) {
+                                let randomPrice = Math.floor(Math.random() * 8000000) + 1500000;
+                                let priceText = "Rp " + randomPrice.toLocaleString('id-ID');
+                                mockResultList.push({
+                                    merk_input: currentItem.m,
+                                    tipe_input: currentItem.t,
+                                    nama_produk: `${currentItem.m} ${currentItem.t} Premium RAM ${4 * i}GB Internal ${64 * i}GB`,
+                                    harga: priceText,
+                                    terjual: (Math.floor(Math.random() * 80) + 10 * i) + " terjual",
+                                    rating: (4.5 + (Math.random() * 0.5)).toFixed(1),
+                                    toko: "Toko_Gadget_" + currentItem.m,
+                                    lokasi: "Jakarta Pusat",
+                                    url: "https://tokopedia.com"
+                                });
+                            }
+                            
+                            mockStep++;
+                            addLogConsole("ANTI_BAN", "Tidur 2 detik guna menjaga ritme request API (Anti-banned)...");
+                            setTimeout(processMockItem, 1900);
+
+                        }, 1200);
+                    } else {
+                        // Finished
+                        updateProgressBar(100, "Scraping Berhasil!");
+                        addLogConsole("DEMO_SCRAPER", `Selesai! Berhasil merender ${mockResultList.length} data baru ke database memori.`, 'success');
+                        
+                        scrapedDatabase = mockResultList;
+                        renderResultsTable();
+                        
+                        // Switch view automatically
+                        setTimeout(() => { switchView('results'); }, 1500);
+                    }
+                }
+
+                processMockItem();
+            }
+
+            // Restore Start Button
+            setTimeout(() => {
+                startBtn.disabled = false;
+                startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }, 5000);
+        }
+
+        // 7. Results Table Controller (Filters & Render)
+        function renderResultsTable() {
+            const tbody = document.getElementById('scraped-results-tbody');
+            const searchVal = document.getElementById('table-search').value.toLowerCase();
+            const brandFilter = document.getElementById('table-filter-brand').value;
+            
+            tbody.innerHTML = '';
+            let displayedItemsCount = 0;
+            let sumPrice = 0;
+            let totalSalesEst = 0;
+            let cities = {};
+
+            scrapedDatabase.forEach(item => {
+                // Apply filters
+                const matchSearch = item.nama_produk.toLowerCase().includes(searchVal) || 
+                                    item.toko.toLowerCase().includes(searchVal) || 
+                                    item.tipe_input.toLowerCase().includes(searchVal);
+                
+                const matchBrand = (brandFilter === 'ALL' || item.merk_input.toLowerCase() === brandFilter.toLowerCase());
+
+                if (matchSearch && matchBrand) {
+                    displayedItemsCount++;
+                    
+                    // Parse price & sales for stats
+                    let parsedPrice = parseInt(item.harga.replace(/[^0-9]/g, '')) || 0;
+                    let parsedSales = parseInt(item.terjual.replace(/[^0-9]/g, '')) || 0;
+                    sumPrice += parsedPrice;
+                    totalSalesEst += parsedSales;
+
+                    cities[item.lokasi] = (cities[item.lokasi] || 0) + 1;
+
+                    // Row HTML
+                    const row = document.createElement('tr');
+                    row.className = "hover:bg-slate-50 transition border-b border-slate-100";
+                    row.innerHTML = `
+                        <td class="py-3 px-6">
+                            <span class="font-bold text-slate-800">${item.merk_input}</span>
+                            <span class="text-slate-400 block text-[10px]">${item.tipe_input}</span>
+                        </td>
+                        <td class="py-3 px-6 max-w-xs truncate" title="${item.nama_produk}">${item.nama_produk}</td>
+                        <td class="py-3 px-6 font-bold text-slate-800">${item.harga}</td>
+                        <td class="py-3 px-6"><span class="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded font-semibold text-[10px]">${item.terjual}</span></td>
+                        <td class="py-3 px-6 text-amber-500"><i class="fa-solid fa-star"></i> ${item.rating}</td>
+                        <td class="py-3 px-6">
+                            <span class="text-slate-800 block font-semibold">${item.toko}</span>
+                            <span class="text-slate-400 text-[10px] block">${item.lokasi}</span>
+                        </td>
+                        <td class="py-3 px-6 text-center">
+                            <a href="${item.url}" target="_blank" class="text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 p-1.5 rounded transition inline-block"><i class="fa-solid fa-up-right-from-square"></i></a>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                }
+            });
+
+            // Update stats
+            document.getElementById('stat-avg-price').textContent = displayedItemsCount > 0 
+                ? "Rp " + Math.round(sumPrice / displayedItemsCount).toLocaleString('id-ID')
+                : "Rp 0";
+            
+            document.getElementById('stat-total-sales').textContent = totalSalesEst + "+ Item";
+            
+            // Find top city
+            let topCity = "Jakarta Barat";
+            let maxCityCount = 0;
+            for (let city in cities) {
+                if (cities[city] > maxCityCount) {
+                    maxCityCount = cities[city];
+                    topCity = city;
+                }
+            }
+            document.getElementById('stat-top-city').textContent = topCity;
+
+            // Update Dashboard KPI Total
+            document.getElementById('kpi-total-scraped').textContent = scrapedDatabase.length;
+        }
+
+        function filterTable() {
+            renderResultsTable();
+        }
+
+        // 8. Download Data Result to Local CSV File
+        function downloadAsExcel() {
+            if (scrapedDatabase.length === 0) {
+                alert("Database scraping masih kosong. Silakan jalankan scraper terlebih dahulu!");
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,Merk Input,Tipe Input,Nama Produk Tokopedia,Harga,Terjual,Rating,Toko,Lokasi,URL\n";
+            scrapedDatabase.forEach(item => {
+                let row = `"${item.merk_input}","${item.tipe_input}","${item.nama_produk}","${item.harga}","${item.terjual}","${item.rating}","${item.toko}","${item.lokasi}","${item.url}"\n`;
+                csvContent += row;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "hasil_scraping_tokopedia.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 9. Initializing Sample Dashboard Activity Chart (Using ChartJS)
+        function initializeChart() {
+            const ctx = document.getElementById('weeklyChart').getContext('2d');
+            
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'],
+                    datasets: [{
+                        label: 'Volume Data Scraped',
+                        data: [120, 190, 300, 250, 400, 310, 480],
+                        borderColor: '#4f46e5',
+                        backgroundColor: 'rgba(79, 70, 229, 0.05)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            grid: {
+                                color: '#f1f5f9'
+                            },
+                            ticks: {
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+
+</body>
+</html>
+
+```
