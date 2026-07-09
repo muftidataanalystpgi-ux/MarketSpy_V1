@@ -1,5 +1,6 @@
 streamlit
 playwright
+nest_asyncio
 pandas
 plotly
 folium
