@@ -277,7 +277,7 @@ else:
             rep_col1, rep_col2, rep_col3 = pd_st.columns(3)
             rep_col1.metric("Rerata Rating Pasar", f"{df_valid_rating['Rating_Murni'].mean():.2f} / 5.0")
             rep_col2.metric("Review Terbanyak", f"{int(df['Total_Ulasan'].max())} Ulasan")
-            rep_col3.metric("Cabang Butuh Evaluasi QC", f"{len(bad_branches)} Titik")
+            rep_col3.metric("Butuh Evaluasi QC", f"{len(bad_branches)} Titik")
             
             g_layout1, g_layout2 = pd_st.columns([3, 2])
             with g_layout1:
@@ -287,11 +287,11 @@ else:
                 fig_scat = px.scatter(df, x="Total_Ulasan", y="Rating_Murni", hover_name="Nama Tempat", title="Volume Review vs Kualitas", color_discrete_sequence=['#3B82F6'])
                 pd_st.plotly_chart(fig_scat, use_container_width=True)
                 
-            pd_st.write("### Daftar Cabang Kategori Lampu Merah (Rating <= 4.0)")
+            pd_st.write("### Daftar Kategori Lampu Merah (Rating <= 4.0)")
             if not bad_branches.empty:
                 pd_st.dataframe(bad_branches.sort_values(by='Rating_Murni')[['Nama Tempat', 'Rating', 'No. Telepon', 'Alamat']], use_container_width=True)
             else:
-                pd_st.success("🎉 Tidak ada cabang dengan rating buruk (<= 4.0).")
+                pd_st.success("Tidak ada kategori dengan rating buruk (<= 4.0).")
 
         # TAB 3: DIGITAL READINESS
         with tab_digital:
