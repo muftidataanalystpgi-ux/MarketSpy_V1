@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#3B82F6"          # Warna biru terang untuk tombol & tab aktif
+backgroundColor = "#FFFFFF"      # Latar belakang bersih
+secondaryBackgroundColor = "#F1F5F9" # Warna abu-abu kebiruan untuk sidebar/card
+textColor = "#1E293B"            # Teks gelap premium (bukan hitam pekat)
+font = "sans serif"
