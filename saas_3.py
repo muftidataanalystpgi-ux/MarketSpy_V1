@@ -82,11 +82,11 @@ async def run_google_maps_scraper(keyword, status_ui):
             return None
         
         status_ui.text("Membuka gulungan peta (Scrolling feed)...")
-        for i in range(3):
+        for i in range(30):
             feed = await page.query_selector('div[role="feed"]')
             if feed:
                 await feed.evaluate("element => element.scrollBy(0, 3000)")
-                await page.wait_for_timeout(1000)
+                await page.wait_for_timeout(1500)
         
         place_elements = await page.query_selector_all('a[href*="/maps/place/"]')
         urls_to_scrape = []
@@ -94,11 +94,11 @@ async def run_google_maps_scraper(keyword, status_ui):
             href = await el.get_attribute('href')
             if href and href not in urls_to_scrape: urls_to_scrape.append(href)
         
-        total_urls = len(urls_to_scrape[:10])
+        total_urls = len(urls_to_scrape[:10000])
         status_ui.text(f"Ditemukan {total_urls} lokasi potensial. Memulai ekstraksi...")
         
         extracted_data = []
-        for index, target_url in enumerate(urls_to_scrape[:10]):
+        for index, target_url in enumerate(urls_to_scrape[:10000]):
             try:
                 status_ui.text(f"[Proses {index+1}/{total_urls}] Mengekstrak data...")
                 await page.goto(target_url)
@@ -144,7 +144,7 @@ async def run_google_maps_scraper(keyword, status_ui):
 if not pd_st.session_state.logged_in:
     _, login_col, _ = pd_st.columns([1, 2, 1])
     with login_col:
-        pd_st.title("🔑 Login MarketSpy Analytics")
+        pd_st.title("Login MarketSpy Analytics")
         with pd_st.form("login_form"):
             username_input = pd_st.text_input("Username").strip()
             password_input = pd_st.text_input("Password", type="password").strip()
