@@ -140,7 +140,7 @@ async def run_google_maps_scraper(keyword, status_ui):
 with pd_st.container(border=True):
     col_search, col_action = pd_st.columns([4, 1])
     with col_search:
-        input_keyword = pd_st.text_input("Masukkan Kata Kunci Pasar & Lokasi Target", placeholder="Contoh: raja susu tegal, seblak bandung").strip()
+        input_keyword = pd_st.text_input("Masukkan Kata Kunci Pasar & Lokasi Target", placeholder="Contoh: raja gadai tegal, pandai gadai, seblak bandung").strip()
     with col_action:
         pd_st.write("##") # Spacer untuk menyamakan baris tombol
         start_button = pd_st.button("Mulai Scrape & Analisis", type="primary", use_container_width=True)
