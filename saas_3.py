@@ -8,6 +8,11 @@ from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster
 import re
 import io
+import os # <-- Tambahkan ini jika belum ada
+
+# Trik Otomatisasi Instalasi Biner Playwright di Server Cloud
+if not os.path.exists("/home/adminuser/.cache/ms-playwright"):
+    os.system("playwright install chromium")
 
 # =============================================================================
 # CONFIGURATION & HEADER
@@ -54,13 +59,33 @@ def preprocess_data(df_raw):
     data['Longitude'] = pd.to_numeric(data['Longitude'], errors='coerce')
     return data
 
+#async def run_google_maps_scraper(keyword, status_ui):
+ #   async with async_playwright() as p:
+  #      status_ui.text("Menginisialisasi sistem web browser virtual...")
+        # headless=True wajib untuk platform SaaS cloud/production
+   #     browser = await p.chromium.launch(headless=True) 
+    #    page = await browser.new_page()
 async def run_google_maps_scraper(keyword, status_ui):
     async with async_playwright() as p:
         status_ui.text("Menginisialisasi sistem web browser virtual...")
-        # headless=True wajib untuk platform SaaS cloud/production
-        browser = await p.chromium.launch(headless=True) 
-        page = await browser.new_page()
         
+        # MODIFIKASI DISINI: Tambahkan args sandbox untuk Streamlit Cloud
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-blink-features=AutomationControlled"
+            ]
+        )
+        
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = await context.new_page()
+
+
         search_url = f"https://www.google.com/maps/search/{keyword}/"
         status_ui.text(f"Mengirim query pencarian untuk: '{keyword}'...")
         await page.goto(search_url)
