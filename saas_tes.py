@@ -31,40 +31,46 @@ if "current_keyword" not in pd_st.session_state:
     pd_st.session_state.current_keyword = ""
 
 # =============================================================================
-# HELPER FUNCTIONS & CLEANING
+# HELPER FUNCTIONS & SCRAPER ENGINE (BACKEND)
 # =============================================================================
 def clean_text(text):
     if not text:
-        return "N/A"
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+        return "Tidak terdeteksi"
+    cleaned = re.sub(r'[^\x00-\x7F]+', '', text)
+    return cleaned.strip()
 
 def extract_lat_lng(url):
-    """Mengekstrak nilai Latitude dan Longitude dari URL Google Maps secara presisi."""
-    try:
-        match = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url)
-        if match:
-            return float(match.group(1)), float(match.group(2))
-    except Exception:
-        pass
+    match = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', url)
+    if match:
+        return match.group(1), match.group(2)
     return "N/A", "N/A"
 
-def categorize_reputation(rating_str):
-    """Mengkategorikan tempat berdasarkan rating numeriknya."""
-    try:
-        match = re.search(r'(\d+[\.,]\d+|\d+)', rating_str)
-        if match:
-            val = float(match.group(1).replace(',', '.'))
-            if val >= 4.5: return "Reputasi Tinggi (Sangat Bagus)"
-            elif val >= 3.5: return "Reputasi Sedang"
-            else: return "Reputasi Rendah / Perlu Evaluasi"
-    except Exception:
-        pass
-    return "Tidak Ada Data Rating"
+def preprocess_data(df_raw):
+    data = df_raw.copy()
+    if 'Rating' in data.columns:
+        data['Rating_Murni'] = data['Rating'].astype(str).str.extract(r'([0-9\.]+)').astype(float)
+        data['Total_Ulasan'] = data['Rating'].astype(str).str.extract(r'\((\d+)\)').fillna(0).astype(int)
+    else:
+        data['Rating_Murni'] = np.nan
+        data['Total_Ulasan'] = 0
+        
+    data['Latitude'] = pd.to_numeric(data['Latitude'], errors='coerce')
+    data['Longitude'] = pd.to_numeric(data['Longitude'], errors='coerce')
+    
+    # Deteksi Kelas Reputasi untuk segmentasi analisis data
+    def classify_reputation(rating):
+        if pd.isna(rating): return "No Rating"
+        elif rating >= 4.5: return "Premium Class"
+        elif rating >= 4.0: return "Standard Class"
+        else: return "Underperforming"
+        
+    data['Kelas_Reputasi'] = data['Rating_Murni'].apply(classify_reputation)
+    return data
 
-# =============================================================================
-# CORE ENGINE: PLAYWRIGHT GOOGLE MAPS SCRAPER (DEPTH & PRECISION)
-# =============================================================================
+# Hitung Jarak Euclidean Sederhana (Pendekatan Cepat Tanpa Lib Eksternal)
+def calculate_simple_distance(lat1, lon1, lat2, lon2):
+    return np.sqrt((lat1 - lat2)**2 + (lon1 - lon2)**2) * 111  # Konversi kasar ke kilometer
+
 async def run_google_maps_scraper(keyword, status_ui):
     async with async_playwright() as p:
         status_ui.text("Menginisialisasi sistem web browser virtual...")
@@ -87,7 +93,7 @@ async def run_google_maps_scraper(keyword, status_ui):
             await browser.close()
             return None
 
-        status_ui.text("Membuka gulungan peta (Scrolling tanpa batas statis untuk hasil maksimal)...")
+        status_ui.text("Membuka gulungan peta (Scrolling dinamis untuk memaksimalkan kuantitas data)...")
         
         feed = await page.query_selector('div[role="feed"]')
         urls_to_scrape = []
@@ -96,11 +102,11 @@ async def run_google_maps_scraper(keyword, status_ui):
             prev_len = 0
             same_count = 0
             while True:
-                # Scroll ke bawah pada container feed dengan jangkauan lebih dalam
+                # Scroll ke bawah pada container feed dengan lompatan lebih dalam
                 await feed.evaluate("element => element.scrollBy(0, 8000)")
-                await page.wait_for_timeout(2500) # Waktu tunggu render stabil agar presisi data terjaga
+                await page.wait_for_timeout(2500) # Memberikan jeda render agar elemen maps termuat dengan presisi
                 
-                # Ekstrak link secara berkala agar tidak hilang dari memori DOM browser saat di-scroll
+                # Menjaring URL secara berkala saat proses scroll berlangsung agar tidak hilang dari memori DOM
                 place_elements = await page.query_selector_all('a[href*="/maps/place/"]')
                 for el in place_elements:
                     href = await el.get_attribute('href')
@@ -108,14 +114,14 @@ async def run_google_maps_scraper(keyword, status_ui):
                         urls_to_scrape.append(href)
                 
                 current_len = len(urls_to_scrape)
-                status_ui.text(f"Menjaring leads potensial... Terdeteksi sementara: {current_len} tempat.")
+                status_ui.text(f"Menjaring titik potensial... Terdeteksi sementara: {current_len} tempat.")
                 
-                # Cek penanda resmi jika Google Maps sudah mentok ke bawah
+                # Cek apakah notifikasi batas akhir daftar dari Google Maps sudah muncul
                 source_content = await page.content()
                 if "Anda telah mencapai akhir daftar" in source_content or "You've reached the end of the list" in source_content:
                     break
                 
-                # Pengaman putaran loop tak terbatas jika data memang sudah habis
+                # Pelindung loop tak terbatas: jika dalam 5 kali scroll tidak ada pertambahan data, hentikan scroll
                 if current_len == prev_len:
                     same_count += 1
                     if same_count >= 5: 
@@ -126,15 +132,15 @@ async def run_google_maps_scraper(keyword, status_ui):
                 prev_len = current_len
 
         total_urls = len(urls_to_scrape)
-        status_ui.text(f"Total ditemukan {total_urls} titik presisi. Memulai ekstraksi detail mendalam...")
+        status_ui.text(f"Total ditemukan {total_urls} titik presisi. Memulai ekstraksi detail...")
         
         extracted_data = []
         for index, target_url in enumerate(urls_to_scrape):
             try:
-                status_ui.text(f"[Proses Ekstraksi {index+1}/{total_urls}] Mengamankan data...")
+                status_ui.text(f"[Proses {index+1}/{total_urls}] Mengekstrak data...")
                 await page.goto(target_url)
                 
-                # Menunggu perubahan koordinat URL peta dengan batas toleransi 7 detik (Sangat Presisi)
+                # Mengoptimalkan waktu tunggu penyiapan URL koordinat (@lat,lng) menjadi 7 detik
                 try:
                     await page.wait_for_url(lambda url: "@" in url, timeout=7000)
                 except:
@@ -181,148 +187,302 @@ async def run_google_maps_scraper(keyword, status_ui):
         return extracted_data
 
 # =============================================================================
-# USER INTERFACE - CONTROLS & SIDEBAR
+# FRONTEND CONTROL CENTER (DASHBOARD)
 # =============================================================================
-pd_st.sidebar.header("Kontrol Spy & Scraper")
-input_keyword = pd_st.sidebar.text_input("Kata Kunci Pencarian (contoh: 'Cafe Jakarta Selatan')", "")
-
-if pd_st.sidebar.button("Mulai Scrape Data", type="primary"):
-    if input_keyword.strip() == "":
-        pd_st.sidebar.error("Silakan masukkan kata kunci terlebih dahulu!")
-    else:
-        status_box = pd_st.empty()
-        raw_results = asyncio.run(run_google_maps_scraper(input_keyword, status_box))
+with pd_st.container(border=True):
+    col_search, col_action = pd_st.columns([4, 1])
+    with col_search:
+        input_keyword = pd_st.text_input("Masukkan Kata Kunci Pasar & Lokasi Target", placeholder="Contoh: kontraktor di depok, seblak bandung").strip()
+    with col_action:
+        pd_st.write("##") # Spacer untuk menyamakan baris tombol
+        start_button = pd_st.button("Mulai Scrape & Analisis", type="primary", use_container_width=True)
         
-        if raw_results:
-            df_new = pd.DataFrame(raw_results)
-            df_new['Kelas_Reputasi'] = df_new['Rating'].apply(categorize_reputation)
-            
-            pd_st.session_state.saas_df = df_new
-            pd_st.session_state.current_keyword = input_keyword
-            status_box.success(f"Berhasil mengumpulkan {len(df_new)} data untuk kata kunci '{input_keyword}'!")
+    if start_button:
+        if not input_keyword:
+            pd_st.error("Gagal! Kata kunci pencarian tidak boleh dibiarkan kosong.")
         else:
-            status_box.error("Gagal mendapatkan data atau selektor Maps berubah. Coba kata kunci lain.")
+            status_placeholder = pd_st.empty()
+            with pd_st.spinner("Mengaktifkan cloud worker engine..."):
+                raw_results = asyncio.run(run_google_maps_scraper(input_keyword, status_placeholder))
+            status_placeholder.empty()
+            
+            if raw_results:
+                df_processed = preprocess_data(pd.DataFrame(raw_results))
+                pd_st.session_state.saas_df = df_processed
+                pd_st.session_state.current_keyword = input_keyword
+                pd_st.success(f"Analisis Selesai! Berhasil merangkum {len(df_processed)} entitas pasar.")
+            else:
+                pd_st.error("Pencarian gagal. Google Maps tidak mengembalikan hasil, silakan periksa kata kunci Anda.")
 
 # =============================================================================
-# MAIN DASHBOARD WORKSPACE
+# ANALYTICS DASHBOARD TABS
 # =============================================================================
 if pd_st.session_state.saas_df is not None:
-    leads_df = pd_st.session_state.saas_df
+    df = pd_st.session_state.saas_df
+    keyword_safe = pd_st.session_state.current_keyword.replace(" ", "_")
     
-    # Pembuatan Tab untuk Analisis Mendalam
-    tab_data, tab_analytics, tab_mapping = pd_st.tabs(["📋 Data Leads & Prospek", "📊 Analitik Pasar", "📍 Pemetaan Lokasi"])
+    # --- TABS LAYOUT (MENGINTEGRASIKAN TOTAL 8 ANALISIS MENU ASLI) ---
+    tab_geo, tab_reputation, tab_digital, tab_brand, tab_benchmarking, tab_saturation, tab_sentiment, tab_leads_mgmt = pd_st.tabs([
+        " Geospatial Analytics", " Reputation Analytics", " Digital Readiness", 
+        " Brand Consistency", " Competitor Benchmarking", " Saturation Index", 
+        " Sentiment & Trends", " Leads Management (CRM)"
+    ])
     
     # -------------------------------------------------------------------------
-    # TAB 1: DATA LEADS & PROSPEK
+    # TAB 1: GEOSPATIAL ANALYTICS
     # -------------------------------------------------------------------------
-    with tab_data:
-        pd_st.subheader(f"Daftar Prospek Bisnis: {pd_st.session_state.current_keyword}")
-        
-        col_f1, col_f2 = pd_st.columns(2)
-        with col_f1:
-            filter_reputasi = pd_st.multiselect("Filter Berdasarkan Kelas Reputasi", 
-                                                options=leads_df['Kelas_Reputasi'].unique(),
-                                                default=leads_df['Kelas_Reputasi'].unique())
-        with col_f2:
-            search_name = pd_st.text_input("Cari Nama Tempat Tertentu", "")
+    with tab_geo:
+        pd_st.subheader("Analisis Pemetaan Spasial Komersial")
+        df_geo = df.dropna(subset=['Latitude', 'Longitude'])
+        if not df_geo.empty:
+            m_col1, m_col2 = pd_st.columns(2)
+            m_col1.metric("Koordinat Sukses Terpetakan", f"{len(df_geo)} Cabang")
+            m_col2.metric("Koordinat Gagal Ditemukan (N/A)", f"{len(df) - len(df_geo)} Cabang")
             
-        filtered_leads = leads_df[leads_df['Kelas_Reputasi'].isin(filter_reputasi)]
-        if search_name:
-            filtered_leads = filtered_leads[filtered_leads['Nama Tempat'].str.contains(search_name, case=False, na=False)]
-            
-        # Menampilkan DataFrame dengan Kolom Baru + Koordinat Presisi
-        cols_to_show = ['Nama Tempat', 'Rating', 'No. Telepon', 'Alamat', 'Website', 'Kelas_Reputasi', 'Latitude', 'Longitude']
-        pd_st.dataframe(filtered_leads[cols_to_show], use_container_width=True)
-        
-        pd_st.markdown("### 📥 Ekspor Hasil Pencarian")
-        col_exp1, col_exp2 = pd_st.columns(2)
-        
-        # Ekspor CSV
-        csv_buffer = io.StringIO()
-        filtered_leads[cols_to_show].to_csv(csv_buffer, index=False)
-        with col_exp1:
-            pd_st.download_button(
-                label="Ekspor CSV Terfilter",
-                data=csv_buffer.getvalue(),
-                file_name=f"Leads_{pd_st.session_state.current_keyword.replace(' ', '_')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-            
-        # Ekspor Excel
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-            filtered_leads[cols_to_show].to_excel(writer, index=False, sheet_name='Leads Data')
-        with col_exp2:
-            pd_st.download_button(
-                label="Ekspor Excel Terfilter",
-                data=excel_buffer.getvalue(),
-                file_name=f"Leads_{pd_st.session_state.current_keyword.replace(' ', '_')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-
-    # -------------------------------------------------------------------------
-    # TAB 2: ANALITIK PASAR (MARKET ANALYTICS)
-    # -------------------------------------------------------------------------
-    with tab_analytics:
-        pd_st.subheader("Analisis Distribusi Pasar & Reputasi Kompetitor")
-        
-        col_a1, col_a2 = pd_st.columns(2)
-        
-        with col_a1:
-            reputation_counts = leads_df['Kelas_Reputasi'].value_counts().reset_index()
-            reputation_counts.columns = ['Kelas_Reputasi', 'Jumlah']
-            fig_pie = px.pie(reputation_counts, values='Jumlah', names='Kelas_Reputasi', 
-                             title="Persentase Pangsa Reputasi Pasar",
-                             color_discrete_sequence=px.colors.sequential.RdBu)
-            pd_st.plotly_chart(fig_pie, use_container_width=True)
-            
-        with col_a2:
-            leads_df['Status_Digital'] = leads_df['Website'].apply(lambda x: "Punya Website" if "http" in str(x) else "Belum Punya Website")
-            digital_counts = leads_df['Status_Digital'].value_counts().reset_index()
-            digital_counts.columns = ['Status_Digital', 'Total']
-            fig_bar = px.bar(digital_counts, x='Status_Digital', y='Total', 
-                             title="Tingkat Kematangan Digital (Saturasi Website)",
-                             text='Total', color='Status_Digital',
-                             color_discrete_map={"Punya Website": "#2ECC71", "Belum Punya Website": "#E74C3C"})
-            pd_st.plotly_chart(fig_bar, use_container_width=True)
-
-    # -------------------------------------------------------------------------
-    # TAB 3: PEMETAAN LOKASI (GEOSPATIAL MAPPING)
-    # -------------------------------------------------------------------------
-    with tab_mapping:
-        pd_st.subheader("Peta Persebaran Lokasi Kompetitor Terdeteksi")
-        pd_st.markdown("Memetakan koordinat latitude dan longitude secara akurat menggunakan cluster marker.")
-        
-        map_df = leads_df[(leads_df['Latitude'] != "N/A") & (leads_df['Longitude'] != "N/A")].copy()
-        
-        if not map_df.empty:
-            center_lat = map_df['Latitude'].astype(float).mean()
-            center_lng = map_df['Longitude'].astype(float).mean()
-            
-            m = folium.Map(location=[center_lat, center_lng], zoom_start=12)
+            map_center = [df_geo['Latitude'].mean(), df_geo['Longitude'].mean()]
+            m = folium.Map(location=map_center, zoom_start=11)
             marker_cluster = MarkerCluster().add_to(m)
             
-            for _, row in map_df.iterrows():
-                popup_content = f"""
-                <div style='font-family: Arial, sans-serif; width: 200px;'>
-                    <h5 style='margin:0 0 5px 0; color:#2C3E50;'>{row['Nama Tempat']}</h5>
-                    <b>Rating:</b> {row['Rating']}<br>
-                    <b>Telepon:</b> {row['No. Telepon']}<br>
-                    <b>Website:</b> <a href='{row['Website']}' target='_blank'>Kunjungi</a><br>
-                    <b>Reputasi:</b> {row['Kelas_Reputasi']}
+            for _, row in df_geo.iterrows():
+                r = row['Rating_Murni']
+                pin_color = 'green' if r >= 4.5 else 'orange' if r >= 4.0 else 'red' if r < 4.0 else 'blue'
+                popup_box = f"""
+                <div style='font-family: Arial, sans-serif; min-width: 220px; line-height: 1.5;'>
+                    <h4 style='margin:0 0 5px 0; color:#333;'>{row['Nama Tempat']}</h4>
+                    <b>⭐ Rating:</b> {row['Rating']}<br>
+                    <b>📞 Telepon:</b> {row['No. Telepon']}<br>
+                    <b>📍 Alamat:</b> {row['Alamat']}
                 </div>
                 """
                 folium.Marker(
-                    location=[float(row['Latitude']), float(row['Longitude'])],
-                    popup=folium.Popup(popup_content, max_width=250),
-                    tooltip=row['Nama Tempat']
+                    location=[row['Latitude'], row['Longitude']],
+                    popup=folium.Popup(popup_box, max_width=320),
+                    icon=folium.Icon(color=pin_color, icon='briefcase', prefix='fa')
                 ).add_to(marker_cluster)
                 
-            st_folium(m, width="100%", height=500)
+            st_folium(m, width=1300, height=500)
+            pd_st.markdown("🟢 **Premium Class (>= 4.5)** | 🟡 **Standard Class (4.0 - 4.4)** | 🔴 **Underperforming (< 4.0)** | 🔵 **No Rating Data**")
         else:
-            pd_st.warning("Tidak dapat memetakan lokasi karena tidak ada data Latitude & Longitude presisi yang ditemukan dari hasil pencarian saat ini.")
+            pd_st.error("Sistem tidak mendeteksi koordinat geolokasi yang valid pada data ini.")
+
+    # -------------------------------------------------------------------------
+    # TAB 2: REPUTATION ANALYTICS
+    # -------------------------------------------------------------------------
+    with tab_reputation:
+        pd_st.subheader("Metrik Analisis Reputasi & Kepuasan Konsumen")
+        df_valid_rating = df.dropna(subset=['Rating_Murni'])
+        bad_branches = df_valid_rating[(df_valid_rating['Rating_Murni'] <= 4.0) & (df_valid_rating['Rating_Murni'] > 0)]
+        
+        rep_col1, rep_col2, rep_col3 = pd_st.columns(3)
+        rep_col1.metric("Rerata Rating Pasar", f"{df_valid_rating['Rating_Murni'].mean():.2f} / 5.0" if not df_valid_rating.empty else "N/A")
+        rep_col2.metric("Review Terbanyak (Popularitas)", f"{int(df['Total_Ulasan'].max())} Ulasan")
+        rep_col3.metric("Butuh Evaluasi QC (Rating <= 4.0)", f"{len(bad_branches)} Titik")
+        
+        g_layout1, g_layout2 = pd_st.columns([3, 2])
+        with g_layout1:
+            fig_hist = px.histogram(df_valid_rating, x="Rating_Murni", nbins=12, title="Distribusi Kesehatan Rating Kompetitor", labels={'Rating_Murni': 'Skala Bintang Toko'}, color_discrete_sequence=['#10B981'])
+            pd_st.plotly_chart(fig_hist, use_container_width=True)
+        with g_layout2:
+            fig_scat = px.scatter(df, x="Total_Ulasan", y="Rating_Murni", hover_name="Nama Tempat", title="Matriks Korelasi Volume Review vs Kualitas Toko", labels={'Total_Ulasan': 'Jumlah Total Review', 'Rating_Murni': 'Rating'}, color_discrete_sequence=['#3B82F6'])
+            pd_st.plotly_chart(fig_scat, use_container_width=True)
+            
+        pd_st.write("Daftar Kategori Lampu Merah (Rating <= 4.0)")
+        if not bad_branches.empty:
+            bad_branches_sorted = bad_branches.sort_values(by='Rating_Murni', ascending=True)
+            pd_st.dataframe(bad_branches_sorted[['Nama Tempat', 'Rating', 'No. Telepon', 'Alamat']], use_container_width=True)
+        else:
+            pd_st.success("Luar biasa! Tidak ditemukan kategori Lampu Merah (Rating <= 4.0).")
+
+    # -------------------------------------------------------------------------
+    # TAB 3: DIGITAL READINESS & AUDIT
+    # -------------------------------------------------------------------------
+    with tab_digital:
+        pd_st.subheader("Audit Penetrasi Infrastruktur Digital")
+        total_items = len(df)
+        has_website_count = len(df[df['Website'] != 'Belum punya'])
+        has_phone_count = len(df[df['No. Telepon'] != 'Tidak ada'])
+        
+        d_col1, d_col2 = pd_st.columns(2)
+        with d_col1:
+            fig_p1 = px.pie(names=["Miliki Website", "Buta Website"], values=[has_website_count, total_items - has_website_count], title="Tingkat Kepemilikan Website Komersial", hole=0.4, color_discrete_sequence=['#2ECC71', '#E74C3C'])
+            pd_st.plotly_chart(fig_p1, use_container_width=True)
+        with d_col2:
+            fig_p2 = px.pie(names=["Miliki Kontak", "Tidak Ada Kontak"], values=[has_phone_count, total_items - has_phone_count], title="Aksesibilitas Komunikasi (Telepon)", hole=0.4, color_discrete_sequence=['#3498DB', '#BDC3C7'])
+            pd_st.plotly_chart(fig_p2, use_container_width=True)
+            
+        pd_st.write("Hot Leads Generator (Target Prospek Prioritas Utama)")
+        pd_st.warning("Daftar di bawah mengekstrak badan usaha yang belum mengoptimalkan website. Sangat disarankan untuk target penetrasi agensi pemasaran/pembuatan software.")
+        leads_df = df[df['Website'] == 'Belum punya'][['Nama Tempat', 'No. Telepon', 'Alamat']]
+        pd_st.dataframe(leads_df, use_container_width=True)
+
+    # -------------------------------------------------------------------------
+    # TAB 4: BRAND CONSISTENCY
+    # -------------------------------------------------------------------------
+    with tab_brand:
+        pd_st.subheader("Audit Standardisasi & Konsistensi Identitas Brand")
+        text_stream = " ".join(df['Nama Tempat'].astype(str)).lower()
+        cleaned_words = [w for w in text_stream.split() if len(w) > 3 and w not in ['dan', 'yang', 'dengan', 'toko', 'kedai', 'depok', 'jakarta']]
+        word_freq = pd.Series(cleaned_words).value_counts().head(10).reset_index()
+        word_freq.columns = ['Token Kata', 'Frekuensi Pemakaian']
+        
+        b_col1, b_col2 = pd_st.columns([2, 3])
+        with b_col1:
+            pd_st.write("#### Top Keyword Dominan Pada Nama")
+            pd_st.dataframe(word_freq, use_container_width=True)
+        with b_col2:
+            fig_words = px.bar(word_freq, x="Frekuensi Pemakaian", y="Token Kata", orientation='h', title="Pola Kata Kunci Nama di Lapangan", color="Frekuensi Pemakaian", color_continuous_scale=px.colors.sequential.Viridis)
+            pd_st.plotly_chart(fig_words, use_container_width=True)
+            
+        pd_st.write("Master Database Hasil Ekstraksi Lapangan")
+        pd_st.dataframe(df[['Nama Tempat', 'Rating', 'No. Telepon', 'Alamat', 'Website']], use_container_width=True)
+
+    # -------------------------------------------------------------------------
+    # TAB 5: COMPETITOR BENCHMARKING & MATRIX
+    # -------------------------------------------------------------------------
+    with tab_benchmarking:
+        pd_st.subheader(" Competitor Performance Matrix")
+        pd_st.markdown("Analisis kuadran komparatif membagi kompetitor berdasarkan popularitas (volume ulasan) dan tingkat loyalitas pelanggan (rating).")
+        
+        median_rating = df_valid_rating['Rating_Murni'].median() if not df_valid_rating.empty else 4.0
+        median_reviews = df_valid_rating['Total_Ulasan'].median() if not df_valid_rating.empty else 10
+        
+        fig_quadrant = px.scatter(df_valid_rating, x="Total_Ulasan", y="Rating_Murni", hover_name="Nama Tempat", color="Kelas_Reputasi", title=f"Scatter Kuadran Pasar (Median Rating: {median_rating:.1f}, Median Review: {int(median_reviews)})", labels={'Total_Ulasan': 'Volume Ulasan Pelanggan', 'Rating_Murni': 'Skor Rating Bintang'}, color_discrete_map={"Premium Class": "#10B981", "Standard Class": "#F59E0B", "Underperforming": "#EF4444", "No Rating": "#9CA3AF"} )
+        fig_quadrant.add_vline(x=median_reviews, line_dash="dash", line_color="gray", annotation_text="Benchmark Volume")
+        fig_quadrant.add_hline(y=median_rating, line_dash="dash", line_color="gray", annotation_text="Benchmark Rating")
+        pd_st.plotly_chart(fig_quadrant, use_container_width=True)
+        
+        pd_st.write(" **Bandingkan Langsung Beberapa Brand**")
+        selected_brands = pd_st.multiselect("Pilih kompetitor untuk diaudit:", options=df['Nama Tempat'].unique(), default=df['Nama Tempat'].unique()[:3] if len(df) >=3 else df['Nama Tempat'].unique())
+        if selected_brands:
+            compare_df = df[df['Nama Tempat'].isin(selected_brands)][['Nama Tempat', 'Rating_Murni', 'Total_Ulasan', 'Website', 'No. Telepon']]
+            pd_st.dataframe(compare_df, use_container_width=True)
+
+    # -------------------------------------------------------------------------
+    # TAB 6: MARKET DENSITY & SATURATION INDEX
+    # -------------------------------------------------------------------------
+    with tab_saturation:
+        pd_st.subheader("Market Density & Saturation Index")
+        pd_st.markdown("Mengukur kejenuhan pasar kompetitor sejenis dalam wilayah tangkapan geografis.")
+        df_coords = df_geo.copy()
+        
+        if len(df_coords) > 1:
+            distances = []
+            for i, row_i in df_coords.iterrows():
+                min_dist = float('inf')
+                for j, row_j in df_coords.iterrows():
+                    if i == j: continue
+                    dist = calculate_simple_distance(row_i['Latitude'], row_i['Longitude'], row_j['Latitude'], row_j['Longitude'])
+                    if dist < min_dist: min_dist = dist
+                distances.append(min_dist)
+                
+            df_coords['Jarak_Kompetitor_Terdekat_KM'] = distances
+            avg_nearest_distance = np.mean(distances)
+            
+            if avg_nearest_distance < 0.5:
+                saturation_status = "SANGAT PADAT (Hiper-Kompetitif)"
+                color_sat = "red"
+                sat_desc = "Kompetitor saling berdekatan dalam radius < 500 meter. Perang harga sangat rawan terjadi."
+            elif avg_nearest_distance < 1.5:
+                saturation_status = "CUKUP PADAT (Kompetitif)"
+                color_sat = "orange"
+                sat_desc = "Kepadatan standar perkotaan. Diferensiasi layanan atau optimasi SEO lokal sangat krusial."
+            else:
+                saturation_status = "LENGANG (Potensi Blue Ocean)"
+                color_sat = "green"
+                sat_desc = "Kepadatan sangat rendah. Peluang ekspansi pasar baru terbuka lebar tanpa persaingan ketat fisik."
+                
+            sat_col1, sat_col2 = pd_st.columns(2)
+            sat_col1.metric("Rerata Jarak Antar Cabang", f"{avg_nearest_distance:.2f} KM")
+            sat_col2.markdown(f"Status Kepadatan Wilayah: <span style='color:{color_sat};font-weight:bold;font-size:20px;'>{saturation_status}</span>", unsafe_allow_html=True)
+            pd_st.info(sat_desc)
+            
+            fig_dist = px.box(df_coords, y="Jarak_Kompetitor_Terdekat_KM", title="Penyebaran Jarak Jangkauan Fisik Antar Kompetitor (KM)", color_discrete_sequence=['#8B5CF6'])
+            pd_st.plotly_chart(fig_dist, use_container_width=True)
+        else:
+            pd_st.warning("Data koordinat spasial kompetitor terlalu sedikit untuk mengalkulasi kepadatan wilayah.")
+
+    # -------------------------------------------------------------------------
+    # TAB 7: SENTIMENT & TREND ANALYTICS
+    # -------------------------------------------------------------------------
+    with tab_sentiment:
+        pd_st.subheader("Sentiment & Trend Analytics (Simulated Social Listening)")
+        pd_st.markdown("Analisis korelasi nama entitas dengan persepsi pasar guna melacak tren penamaan dan indikasi kepuasan sentimen.")
+        df_sent = df_valid_rating.copy()
+        
+        if not df_sent.empty:
+            def estimate_sentiment(row):
+                if row['Rating_Murni'] >= 4.5: return "Positif"
+                elif row['Rating_Murni'] >= 4.0: return "Netral"
+                else: return "Negatif"
+                
+            df_sent['Sentimen_Pasar'] = df_sent.apply(estimate_sentiment, axis=1)
+            sent_counts = df_sent['Sentimen_Pasar'].value_counts().reset_index()
+            sent_counts.columns = ['Status Sentimen', 'Jumlah']
+            
+            sc_col1, sc_col2 = pd_st.columns([2, 3])
+            with sc_col1:
+                fig_sent_pie = px.pie(sent_counts, names="Status Sentimen", values="Jumlah", title="Proporsi Sentimen Layanan Pasar", color="Status Sentimen", color_discrete_map={"Positif": "#10B981", "Netral": "#F59E0B", "Negatif": "#EF4444"})
+                pd_st.plotly_chart(fig_sent_pie, use_container_width=True)
+            with sc_col2:
+                trend_words = []
+                for idx, r in df_sent.iterrows():
+                    cleaned_name = re.sub(r'[^\w\s]', '', r['Nama Tempat'].lower())
+                    for token in cleaned_name.split():
+                        if len(token) > 4 and token not in ['toko', 'depok', 'indonesia', 'jakarta', 'cabang']:
+                            trend_words.append({"Kata": token, "Sentimen": r['Sentimen_Pasar']})
+                if trend_words:
+                    df_trends = pd.DataFrame(trend_words)
+                    df_grouped = df_trends.groupby(['Kata', 'Sentimen']).size().unstack(fill_value=0).reset_index()
+                    df_grouped['Total'] = df_grouped.get('Positif', 0) + df_grouped.get('Netral', 0) + df_grouped.get('Negatif', 0)
+                    df_grouped = df_grouped.sort_values(by='Total', ascending=False).head(10)
+                    fig_trend_bar = px.bar(df_grouped, x='Kata', y=['Positif', 'Netral', 'Negatif'], title="Kata Kunci Merek & Hubungan Sentimen Reputasi", color_discrete_map={"Positif": "#10B981", "Netral": "#F59E0B", "Negatif": "#EF4444"})
+                    pd_st.plotly_chart(fig_trend_bar, use_container_width=True)
+                else:
+                    pd_st.write("Ketersediaan kata kunci tidak mencukupi untuk melakukan analisis tren.")
+
+    # -------------------------------------------------------------------------
+    # TAB 8: LEAD MANAGEMENT & CRM EXPORT
+    # -------------------------------------------------------------------------
+    with tab_leads_mgmt:
+        pd_st.subheader("Lead Export & CRM Integration")
+        pd_st.markdown("Filter prospek prospektif Anda sesuai target kriteria pemasaran, lalu ekspor langsung ke format yang Anda butuhkan.")
+        
+        col_f1, col_f2, col_f3 = pd_st.columns(3)
+        with col_f1:
+            filter_web = pd_st.selectbox("Status Kepemilikan Website:", ["Semua", "Hanya yang Belum Punya Website", "Hanya yang Memiliki Website"])
+        with col_f2:
+            filter_contact = pd_st.selectbox("Status Kontak Telepon:", ["Semua", "Hanya yang Punya Kontak", "Hanya yang Tanpa Kontak"])
+        with col_f3:
+            filter_class = pd_st.multiselect("Kelas Reputasi:", options=df['Kelas_Reputasi'].unique(), default=df['Kelas_Reputasi'].unique())
+            
+        filtered_leads = df.copy()
+        if filter_web == "Hanya yang Belum Punya Website":
+            filtered_leads = filtered_leads[filtered_leads['Website'] == 'Belum punya']
+        elif filter_web == "Hanya yang Memiliki Website":
+            filtered_leads = filtered_leads[filtered_leads['Website'] != 'Belum punya']
+            
+        if filter_contact == "Hanya yang Punya Kontak":
+            filtered_leads = filtered_leads[filtered_leads['No. Telepon'] != 'Tidak ada']
+        elif filter_contact == "Hanya yang Tanpa Kontak":
+            filtered_leads = filtered_leads[filtered_leads['No. Telepon'] == 'Tidak ada']
+            
+        if filter_class:
+            filtered_leads = filtered_leads[filtered_leads['Kelas_Reputasi'].isin(filter_class)]
+            
+        pd_st.write(f"Menampilkan **{len(filtered_leads)}** prospek yang cocok dengan kriteria filter Anda.")
+        
+        # Tampilkan DataFrame Hasil Filter lengkap dengan koordinat spasial
+        cols_to_show = ['Nama Tempat', 'Rating', 'No. Telepon', 'Alamat', 'Website', 'Kelas_Reputasi', 'Latitude', 'Longitude']
+        pd_st.dataframe(filtered_leads[cols_to_show], use_container_width=True)
+        
+        col_exp1, col_exp2, _ = pd_st.columns([2, 2, 4])
+        csv_filtered = filtered_leads[cols_to_show].to_csv(index=False).encode('utf-8')
+        col_exp1.download_button("Ekspor CSV Terfilter", data=csv_filtered, file_name=f"leads_{keyword_safe}_filtered.csv", mime="text/csv", use_container_width=True )
+        
+        excel_filtered_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_filtered_buffer, engine='openpyxl') as writer:
+            filtered_leads[cols_to_show].to_excel(writer, index=False, sheet_name='Filtered Leads')
+        col_exp2.download_button("Ekspor Excel Terfilter", data=excel_filtered_buffer.getvalue(), file_name=f"leads_{keyword_safe}_filtered.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True )
 
 else:
-    pd_st.info("💡 Selamat datang di MarketSpy! Silakan tentukan kata kunci pencarian Anda pada menu sidebar kiri lalu klik tombol **'Mulai Scrape Data'** untuk mengumpulkan data prospek bisnis.")
+    pd_st.info("Silakan tentukan kata kunci target di atas, lalu tekan tombol 'Mulai Scrape & Analisis' untuk memuat dashboard.")
