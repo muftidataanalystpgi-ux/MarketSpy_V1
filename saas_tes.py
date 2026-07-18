@@ -221,7 +221,7 @@ if pd_st.session_state.saas_df is not None:
     df = pd_st.session_state.saas_df
     keyword_safe = pd_st.session_state.current_keyword.replace(" ", "_")
     
-    # --- TABS LAYOUT (MENGINTEGRASIKAN TOTAL 8 ANALISIS MENU ASLI) ---
+    # --- TABS LAYOUT (TOTAL 8 TAB SEPERTI MENU ASLI) ---
     tab_geo, tab_reputation, tab_digital, tab_brand, tab_benchmarking, tab_saturation, tab_sentiment, tab_leads_mgmt = pd_st.tabs([
         " Geospatial Analytics", " Reputation Analytics", " Digital Readiness", 
         " Brand Consistency", " Competitor Benchmarking", " Saturation Index", 
@@ -402,7 +402,7 @@ if pd_st.session_state.saas_df is not None:
             pd_st.warning("Data koordinat spasial kompetitor terlalu sedikit untuk mengalkulasi kepadatan wilayah.")
 
     # -------------------------------------------------------------------------
-    # TAB 7: SENTIMENT & TREND ANALYTICS
+    # TAB 7: SENTIMENT & TREND ANALYTICS (FIXED SAFETY REINDEX)
     # -------------------------------------------------------------------------
     with tab_sentiment:
         pd_st.subheader("Sentiment & Trend Analytics (Simulated Social Listening)")
@@ -432,10 +432,16 @@ if pd_st.session_state.saas_df is not None:
                             trend_words.append({"Kata": token, "Sentimen": r['Sentimen_Pasar']})
                 if trend_words:
                     df_trends = pd.DataFrame(trend_words)
-                    df_grouped = df_trends.groupby(['Kata', 'Sentimen']).size().unstack(fill_value=0).reset_index()
-                    df_grouped['Total'] = df_grouped.get('Positif', 0) + df_grouped.get('Netral', 0) + df_grouped.get('Negatif', 0)
+                    df_grouped = df_trends.groupby(['Kata', 'Sentimen']).size().unstack(fill_value=0)
+                    
+                    # --- FIX SAFETY OPTIMIZATION MATRIX ---
+                    # Memastikan kolom Positif, Netral, dan Negatif selalu ada meskipun nilainya 0 agar tidak terjadi ValueError
+                    df_grouped = df_grouped.reindex(columns=['Positif', 'Netral', 'Negatif'], fill_value=0).reset_index()
+                    
+                    df_grouped['Total'] = df_grouped['Positif'] + df_grouped['Netral'] + df_grouped['Negatif']
                     df_grouped = df_grouped.sort_values(by='Total', ascending=False).head(10)
-                    fig_trend_bar = px.bar(df_grouped, x='Kata', y=['Positif', 'Netral', 'Negatif'], title="Kata Kunci Merek & Hubungan Sentimen Reputasi", color_discrete_map={"Positif": "#10B981", "Netral": "#F59E0B", "Negatif": "#EF4444"})
+                    
+                    fig_trend_bar = px.bar(df_grouped, x='Kata', y=['Positif', 'Netral', 'Negatif'], title="Kata Merek & Hubungan Sentimen Reputasi", color_discrete_map={"Positif": "#10B981", "Netral": "#F59E0B", "Negatif": "#EF4444"})
                     pd_st.plotly_chart(fig_trend_bar, use_container_width=True)
                 else:
                     pd_st.write("Ketersediaan kata kunci tidak mencukupi untuk melakukan analisis tren.")
@@ -471,7 +477,6 @@ if pd_st.session_state.saas_df is not None:
             
         pd_st.write(f"Menampilkan **{len(filtered_leads)}** prospek yang cocok dengan kriteria filter Anda.")
         
-        # Tampilkan DataFrame Hasil Filter lengkap dengan koordinat spasial
         cols_to_show = ['Nama Tempat', 'Rating', 'No. Telepon', 'Alamat', 'Website', 'Kelas_Reputasi', 'Latitude', 'Longitude']
         pd_st.dataframe(filtered_leads[cols_to_show], use_container_width=True)
         
