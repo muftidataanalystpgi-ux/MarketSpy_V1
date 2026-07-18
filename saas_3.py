@@ -519,7 +519,7 @@ if pd_st.session_state.saas_df is not None:
         pd_st.write(f"Menampilkan **{len(filtered_leads)}** prospek yang cocok dengan kriteria filter Anda.")
         
         # Tampilkan DataFrame Hasil Filter
-        cols_to_show = ['Nama Tempat', 'Rating', 'No. Telepon', 'Alamat', 'Website', 'Kelas_Reputasi']
+        cols_to_show = ['Nama Tempat', 'Rating', 'No. Telepon', 'Alamat', 'Website', 'Kelas_Reputasi','Latitude', 'Longitude']
         pd_st.dataframe(filtered_leads[cols_to_show], use_container_width=True)
         
         # Utilitas Ekspor Kustom berdasarkan Hasil Filter
